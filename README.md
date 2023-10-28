@@ -1,0 +1,1 @@
+# decred-flatpak-repo
