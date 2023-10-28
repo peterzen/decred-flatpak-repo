@@ -1,0 +1,4 @@
+build-dir
+repo-dir
+.flatpak-builder
+.vscode/settings.json

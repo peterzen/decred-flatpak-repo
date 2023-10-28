@@ -1,0 +1,53 @@
+app-id: org.decred.dcrdex
+runtime: org.gnome.Platform
+# gnome > 42 contains libwebkit-4.1 but we need 4.0
+runtime-version: '42'
+sdk: org.gnome.Sdk 
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.golang
+command: dexc
+finish-args:
+  - --socket=x11
+  - --socket=wayland
+  - --share=ipc
+  - --share=network
+  - --device=dri
+  - --filesystem=~/.dexc
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+build-options:
+# this needs to be disabled for production.  flathub will not accept
+# builds requiring network access.
+  build-args:
+    - --share=network
+  env:
+    - GOBIN=/app/bin
+    - GOROOT=/usr/lib/sdk/golang  
+modules:
+  - name: dexc
+    buildsystem: simple
+    subdir: client/cmd/dexc-desktop
+    build-commands:
+      - $GOROOT/bin/go build -trimpath -o dexc
+      - install -Dm755 dexc ${FLATPAK_DEST}/bin/dexc
+      - install -Dm644 metainfo/${FLATPAK_ID}.metainfo.xml ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
+      - install -Dm644 metainfo/${FLATPAK_ID}.desktop ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
+      - install -Dm644 src/dexc.svg ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/${FLATPAK_ID}.svg
+      - install -Dm644 src/dexc.png ${FLATPAK_DEST}/share/icons/hicolor/128x128/apps/${FLATPAK_ID}.png
+    sources:
+      - type: archive
+        url: https://github.com/peterzen/dcrdex/archive/refs/tags/v0.7.0.tar.gz
+        sha256: 920c6188616f3805e5866ca1d551167562f4f52f27ce3e727df2987600b02a6c
+        x-checker-data:
+          type: json
+          url: https://api.github.com/repos/peterzen/dcrdex/releases/latest
+          tag-query: .tag_name
+          timestamp-query: .published_at
+          version-query: $tag | sub("^[vV]"; "")
+          url-query: '"https://github.com/peterzen/dcrdex/archive/\($tag)/v\($version).tar.gz"'
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - "*.la"
+  - "*.a"

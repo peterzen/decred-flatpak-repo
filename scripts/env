@@ -1,0 +1,2 @@
+BUILD_DIR=$(pwd)/build-dir
+REPO_DIR=$(pwd)/repo-dir

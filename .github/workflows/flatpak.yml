@@ -1,0 +1,92 @@
+name: Flatpak build and publish
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+  
+env:
+  APP_ID: org.decred.dcrdex
+  MANIFEST_PATH: org.decred.dcrdex.yml
+  FLATPAK_BRANCH: stable
+  FLATPAK_BUILD_DIR: build-dir
+  FLATPAK_BUILD_REPO: repo-dir
+  FLATPAK_COLLECTION_ID: org.decred
+  GNUPGHOME: ${{ github.workspace }}/.gnupg
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: 'github-pages'
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+    - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+      with:
+        submodules: true
+
+    - name: Install flatpak-builder
+      run: |
+        set -e
+        sudo apt update -y
+        sudo apt install -y flatpak-builder
+
+    - name: Dump canonical manifest
+      run: |
+        set -e
+        flatpak-builder --show-manifest ${MANIFEST_PATH} > canonical-manifest.json
+
+    - name: Download flatpak SDK and sources
+      run: |
+        set -e
+        flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+        flatpak-builder --install-deps-from=flathub --install-deps-only --user /dev/null ${MANIFEST_PATH}
+        flatpak-builder --download-only /dev/null ${MANIFEST_PATH}
+
+    - name: Prime cache
+      uses: actions/cache@704facf57e6136b1bc63b828d79edcd491f0ee84 # v3.3.2
+      with:
+        path: |
+          .flatpak-builder/ccache
+        key: flatpak-builder-${{ hashFiles('canonical-manifest.json') }}
+        restore-keys: |
+          flatpak-builder-
+
+    - name: Setup GPG
+      id: gpg
+      env:
+        GNUPGHOME: ${{ env.GNUPGHOME }}
+      uses: crazy-max/ghaction-import-gpg@82a020f1f7f605c65dd2449b392a52c3fcfef7ef # v6.0.0
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+    - name: Build flatpak
+      run: |
+        set -e
+        flatpak-builder --disable-updates --ccache --gpg-sign=${{ steps.gpg.outputs.keyid }} --gpg-homedir=${GNUPGHOME} --collection-id=${FLATPAK_COLLECTION_ID} --repo=${FLATPAK_BUILD_REPO} ${FLATPAK_BUILD_DIR} ${MANIFEST_PATH}
+
+    - name: Fix permissions
+      run: |
+        sudo chmod -R o+r ${FLATPAK_BUILD_REPO}
+
+    - name: Assemble GH Pages web root
+      run: |
+        cp www/* ${FLATPAK_BUILD_REPO}
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@a753861a5debcf57bf8b404356158c8e1e33150c # v2.0.0
+      with:
+        path: ${{ env.FLATPAK_BUILD_REPO }}
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@9dbe3824824f8a1377b8e298bafde1a50ede43e5 # v2.0.4
